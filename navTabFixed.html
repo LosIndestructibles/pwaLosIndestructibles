@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es" class="light dark">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Cámara - PWA</title>
+
+  <script src="js/registraServiceWorker.js"></script>
+
+  <meta name="viewport" content="width=device-width">
+  <meta name="theme-color" content="#fffbfe">
+  <link rel="icon" sizes="32x32" href="favicon.ico">
+  <link rel="manifest" href="site.webmanifest">
+  <script src="ungap/custom-elements.js"></script>
+
+  <script type="module" src="js/configura.js"></script>
+  <link rel="stylesheet" href="css/estilos.css">
+  <link rel="stylesheet" href="css/transicion_pestanas.css">
+</head>
+
+<body>
+
+  <h1 id="headline">PWA - Cámara</h1>
+
+    <!-- Barra de pestañas igual que en index -->
+ <nav-tab-fixed id="tab">
+  <a href="index.html" class="tab">Geolocalización</a>
+  <a href="secundaria.html" class="tab active">Archivos</a>
+  <a href="navTabFixed.html" class="tab">Cámara</a>
+  <a href="ayuda.html" class="tab">Ayuda</a>
+ </nav-tab-fixed>
+
+  <main>
+    <p>
+      Para grabar o capturar imagen, cliquea <strong>Inicia</strong>.
+    </p>
+    <p>
+      Para grabar por 5 segundos cliquea <strong>Grabar</strong> y cliquea <strong>Detener</strong> para detener.
+    </p>
+    <p>
+      Para capturar una imagen de la cámara, cliquea <strong>Captura</strong>.
+    </p>
+
+    <p style="justify-content: center; display: flex; gap: 8px;">
+      <button class="md-filled-button" type="button" onclick="inicia()">Inicia</button>
+      <button class="md-filled-button" type="button" onclick="graba()">Grabar</button>
+      <button class="md-filled-button" type="button" onclick="detener()">Detener</button>
+      <button class="md-filled-button" type="button" onclick="captura()">Captura</button>
+    </p>
+
+    <div class="md-cards" style="justify-content: center;">
+      <div class="card">
+        <figure>
+          <video id="preview" width="160" height="120" autoplay muted></video>
+        </figure>
+        <span class="headline">Preview</span>
+        <span class="supporting">Vista en vivo de la cámara.</span>
+      </div>
+
+      <div class="card">
+        <figure>
+          <video id="recording" width="160" height="120" controls></video>
+        </figure>
+        <span class="headline">Recording</span>
+        <span class="supporting">
+          <a id="descarga">Descarga Video</a>
+          <div id="mensajes"></div>
+        </span>
+      </div>
+
+      <div class="card">
+        <figure>
+          <canvas id="canvas" width="160" height="120"></canvas>
+        </figure>
+        <span class="headline">Imagen</span>
+        <span class="supporting">
+          <a id="descargaImagen">Descarga Imagen</a>
+        </span>
+      </div>
+    </div>
+  </main>
+
+  <style>
+    nav-tab-fixed {
+      display: flex;
+      justify-content: space-around;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: #f3e5f5;
+      padding: 10px 0;
+      border-top: 1px solid #ccc;
+    }
+
+    nav-tab-fixed .tab {
+      text-decoration: none;
+      color: #6A1B9A;
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    nav-tab-fixed .tab.active {
+      font-weight: 700;
+      border-bottom: 2px solid #6A1B9A;
+    }
+
+    main {
+      padding: 16px;
+      margin-bottom: 60px;
+    }
+  </style>
+
+  <!-- 🎥 Script de cámara (sin tocar tu lógica) -->
+  <script>
+    let stream = null;
+    let TIEMPO_DE_GRABACION = 5000;
+    var context = canvas.getContext('2d');
+
+    async function inicia() {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true
+        });
+        preview.srcObject = stream;
+        descarga.href = stream;
+        preview.captureStream = preview.captureStream || preview.mozCaptureStream;
+        await new Promise(resolve => preview.onplaying = resolve);
+      } catch (e) {
+        log(e.message);
+      }
+    }
+
+    async function graba() {
+      try {
+        const recordedChunks = await grabaClip(stream, TIEMPO_DE_GRABACION);
+        let recordedBlob = new Blob(recordedChunks, { type: "video/webm" });
+        recording.src = URL.createObjectURL(recordedBlob);
+        descarga.href = recording.src;
+        descarga.download = "RecordedVideo.webm";
+        log("Exitosamente grabados " + recordedBlob.size + " bytes de " + recordedBlob.type + " media.");
+      } catch (e) {
+        log(e.message);
+      }
+    }
+
+    function detener() {
+      detiene(preview.srcObject);
+    }
+
+    function captura() {
+      context.drawImage(preview, 0, 0, 160, 120);
+      descargaImagen.href = canvas.toDataURL('image/jpeg');
+      descargaImagen.download = "imagen.jpg";
+    }
+
+    function grabaClip(stream, milisegundos) {
+      let recorder = new MediaRecorder(stream);
+      let data = [];
+      recorder.ondataavailable = event => data.push(event.data);
+      recorder.start();
+      log(recorder.state + " durante " + (milisegundos / 1000) + " segundos…");
+
+      let detenido = new Promise((resolve, reject) => {
+        recorder.onstop = resolve;
+        recorder.onerror = event => reject(event.name);
+      });
+
+      let grabado = espera(milisegundos)
+        .then(() => recorder.state === "recording" && recorder.stop());
+
+      return Promise.all([detenido, grabado]).then(() => data);
+    }
+
+    function detiene(stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+
+    function log(msg) {
+      mensajes.innerHTML += msg + "<br>";
+    }
+
+    function espera(milisegundos) {
+      return new Promise(resolve => setTimeout(resolve, milisegundos));
+    }
+  </script>
+
+  <!-- Swipe para cambiar de página -->
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      let startX = 0;
+      let endX = 0;
+      const threshold = 80;
+
+      document.addEventListener("touchstart", e => {
+        startX = e.changedTouches[0].screenX;
+      });
+
+      document.addEventListener("touchend", e => {
+        endX = e.changedTouches[0].screenX;
+        handleSwipe();
+      });
+
+      function handleSwipe() {
+        const delta = endX - startX;
+        if (Math.abs(delta) < threshold) return;
+
+        const pages = ["index.html", "archivos.html", "camara.html", "ayuda.html"];
+        const current = location.pathname.split("/").pop() || "index.html";
+        const currentIndex = pages.indexOf(current);
+
+        if (delta < 0 && currentIndex < pages.length - 1) {
+          location.href = pages[currentIndex + 1];
+        } else if (delta > 0 && currentIndex > 0) {
+          location.href = pages[currentIndex - 1];
+        }
+      }
+    });
+  </script>
+
+</body>
+</html>

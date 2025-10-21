@@ -1,0 +1,29 @@
+/* Este es el contenido que estaba en el bloque <style> */
+nav-tab-fixed {
+    display: flex;
+    justify-content: space-around;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #f3e5f5;
+    padding: 10px 0;
+    border-top: 1px solid #ccc;
+}
+
+nav-tab-fixed .tab {
+    text-decoration: none;
+    color: #6A1B9A;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+nav-tab-fixed .tab.active {
+    font-weight: 700;
+    border-bottom: 2px solid #6A1B9A;
+}
+
+main {
+    padding: 16px;
+    margin-bottom: 60px; /* deja espacio para la barra fija */
+}
